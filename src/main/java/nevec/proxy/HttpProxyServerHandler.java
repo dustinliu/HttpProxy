@@ -1,45 +1,63 @@
 package nevec.proxy;
 
-import static io.netty.handler.codec.http.HttpHeaders.Names.CONNECTION;
-import static io.netty.handler.codec.http.HttpHeaders.Names.CONTENT_LENGTH;
-import static io.netty.handler.codec.http.HttpHeaders.Names.CONTENT_TYPE;
-import static io.netty.handler.codec.http.HttpHeaders.Names.COOKIE;
-import static io.netty.handler.codec.http.HttpHeaders.Names.SET_COOKIE;
-import static io.netty.handler.codec.http.HttpResponseStatus.BAD_REQUEST;
 import static io.netty.handler.codec.http.HttpResponseStatus.CONTINUE;
 import static io.netty.handler.codec.http.HttpResponseStatus.OK;
 import static io.netty.handler.codec.http.HttpVersion.HTTP_1_1;
 
+import java.io.IOException;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import com.ning.http.client.AsyncHandler;
+import com.ning.http.client.AsyncHttpClient;
+import com.ning.http.client.AsyncHttpClientConfig;
+import com.ning.http.client.HttpResponseBodyPart;
+import com.ning.http.client.HttpResponseHeaders;
+import com.ning.http.client.HttpResponseStatus;
+import com.ning.http.client.RequestBuilder;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.ChannelFutureListener;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.SimpleChannelInboundHandler;
-import io.netty.handler.codec.DecoderResult;
-import io.netty.handler.codec.http.Cookie;
-import io.netty.handler.codec.http.CookieDecoder;
 import io.netty.handler.codec.http.DefaultFullHttpResponse;
+import io.netty.handler.codec.http.DefaultHttpContent;
 import io.netty.handler.codec.http.FullHttpResponse;
 import io.netty.handler.codec.http.HttpContent;
 import io.netty.handler.codec.http.HttpHeaders;
-import io.netty.handler.codec.http.HttpObject;
 import io.netty.handler.codec.http.HttpRequest;
+import io.netty.handler.codec.http.HttpResponse;
+import io.netty.handler.codec.http.HttpVersion;
 import io.netty.handler.codec.http.LastHttpContent;
-import io.netty.handler.codec.http.QueryStringDecoder;
-import io.netty.handler.codec.http.ServerCookieEncoder;
 import io.netty.util.CharsetUtil;
 
 public class HttpProxyServerHandler extends SimpleChannelInboundHandler<Object> {
 
     private HttpRequest request;
-    /**
-     * Buffer that stores the response content
-     */
-    private final StringBuilder buf = new StringBuilder();
+    private String scheme;
+    private RequestBuilder requestBuilder;
+
+    private static AsyncHttpClient httpClient;
+    private static final int IDLE_CONNECTION_TIMEOUT = 10000;
+    private static final int CONNECTION_LIFETIME = 100000;
+    private static final int MAX_RETRY = 5;
+    private static final String HOST_HEADER = "HOST";
+
+    static  {
+        AsyncHttpClientConfig config = new AsyncHttpClientConfig.Builder()
+                .setFollowRedirects(false)
+                .setAllowPoolingConnection(true)
+                .setIdleConnectionInPoolTimeoutInMs(IDLE_CONNECTION_TIMEOUT)
+                .setMaxConnectionLifeTimeInMs(CONNECTION_LIFETIME)
+                .setMaxRequestRetry(MAX_RETRY)
+                .build();
+        httpClient = new AsyncHttpClient(config);
+    }
+
+    HttpProxyServerHandler(String scheme) {
+        this.scheme = scheme;
+    }
 
     @Override
     public void channelReadComplete(ChannelHandlerContext ctx) {
@@ -53,108 +71,110 @@ public class HttpProxyServerHandler extends SimpleChannelInboundHandler<Object> 
             if (HttpHeaders.is100ContinueExpected(request)) {
                 send100Continue(ctx);
             }
-            buf.setLength(0);
-            buf.append("WELCOME TO THE WILD WILD WEB SERVER\r\n");
-            buf.append("===================================\r\n");
-            buf.append("VERSION: ").append(request.getProtocolVersion()).append("\r\n");
-            buf.append("HOSTNAME: ").append(HttpHeaders.getHost(request, "unknown")).append("\r\n");
-            buf.append("REQUEST_URI: ").append(request.getUri()).append("\r\n\r\n");
+
+            requestBuilder = new RequestBuilder();
+            requestBuilder.setMethod(request.getMethod().name());
+
             HttpHeaders headers = request.headers();
             if (!headers.isEmpty()) {
                 for (Map.Entry<String, String> h : headers) {
                     String key = h.getKey();
                     String value = h.getValue();
-                    buf.append("HEADER: ").append(key).append(" = ").append(value).append("\r\n");
+                    requestBuilder.addHeader(key, value);
                 }
-                buf.append("\r\n");
             }
-            QueryStringDecoder queryStringDecoder = new QueryStringDecoder(request.getUri());
-            Map<String, List<String>> params = queryStringDecoder.parameters();
-            if (!params.isEmpty()) {
-                for (Map.Entry<String, List<String>> p : params.entrySet()) {
-                    String key = p.getKey();
-                    List<String> vals = p.getValue();
-                    for (String val : vals) {
-                        buf.append("PARAM: ").append(key).append(" = ").append(val).append("\r\n");
-                    }
-                }
-                buf.append("\r\n");
-            }
-            appendDecoderResult(buf, request);
+
+            String url = scheme + request.headers().get(HOST_HEADER) + request.getUri();
+            requestBuilder.setUrl(url);
         }
         if (msg instanceof HttpContent) {
             HttpContent httpContent = (HttpContent) msg;
             ByteBuf content = httpContent.content();
             if (content.isReadable()) {
-                buf.append("CONTENT: ");
-                buf.append(content.toString(CharsetUtil.UTF_8));
-                buf.append("\r\n");
-                appendDecoderResult(buf, request);
             }
             if (msg instanceof LastHttpContent) {
-                buf.append("END OF CONTENT\r\n");
-                LastHttpContent trailer = (LastHttpContent) msg;
-                if (!trailer.trailingHeaders().isEmpty()) {
-                    buf.append("\r\n");
-                    for (String name : trailer.trailingHeaders().names()) {
-                        for (String value : trailer.trailingHeaders().getAll(name)) {
-                            buf.append("TRAILING HEADER: ");
-                            buf.append(name).append(" = ").append(value).append("\r\n");
-                        }
-                    }
-                    buf.append("\r\n");
-                }
-                if (!writeResponse(trailer, ctx)) {
-                    // If keep-alive is off, close the connection once the content is fully written.
-                    ctx.writeAndFlush(Unpooled.EMPTY_BUFFER).addListener(ChannelFutureListener.CLOSE);
+                try {
+                    writeResponse(ctx);
+                } catch (IOException e) {
+                    e.printStackTrace();
                 }
             }
         }
     }
 
-    private static void appendDecoderResult(StringBuilder buf, HttpObject o) {
-        DecoderResult result = o.getDecoderResult();
-        if (result.isSuccess()) {
-            return;
-        }
-        buf.append(".. WITH DECODER FAILURE: ");
-        buf.append(result.cause());
-        buf.append("\r\n");
-    }
-
-    private boolean writeResponse(HttpObject currentObj, ChannelHandlerContext ctx) {
-        // Decide whether to close the connection or not.
+    private void writeResponse(ChannelHandlerContext ctx) throws IOException {
         boolean keepAlive = HttpHeaders.isKeepAlive(request);
         // Build the response object.
-        FullHttpResponse response = new DefaultFullHttpResponse(
-                HTTP_1_1, currentObj.getDecoderResult().isSuccess() ? OK : BAD_REQUEST,
-                Unpooled.copiedBuffer(buf.toString(), CharsetUtil.UTF_8));
-        response.headers().set(CONTENT_TYPE, "text/plain; charset=UTF-8");
-        if (keepAlive) {
-            // Add 'Content-Length' header only for a keep-alive connection.
-            response.headers().set(CONTENT_LENGTH, response.content().readableBytes());
-            // Add keep alive header as per:
-            // - http://www.w3.org/Protocols/HTTP/1.1/draft-ietf-http-v11-spec-01.html#Connection
-            response.headers().set(CONNECTION, HttpHeaders.Values.KEEP_ALIVE);
-        }
-        // Encode the cookie.
-        String cookieString = request.headers().get(COOKIE);
-        if (cookieString != null) {
-            Set<Cookie> cookies = CookieDecoder.decode(cookieString);
-            if (!cookies.isEmpty()) {
-                // Reset the cookies if necessary.
-                for (Cookie cookie : cookies) {
-                    response.headers().add(SET_COOKIE, ServerCookieEncoder.encode(cookie));
-                }
+
+        final HttpResponse response = new DefaultFullHttpResponse(HTTP_1_1, OK);
+        httpClient.executeRequest(requestBuilder.build(), new AsyncHandler<String>() {
+            @Override
+            public void onThrowable(Throwable throwable) {
+                sendError(ctx, io.netty.handler.codec.http.HttpResponseStatus.BAD_REQUEST);
             }
-        } else {
-            // Browser sent no cookie.  Add some.
-            response.headers().add(SET_COOKIE, ServerCookieEncoder.encode("key1", "value1"));
-            response.headers().add(SET_COOKIE, ServerCookieEncoder.encode("key2", "value2"));
-        }
-        // Write the response.
-        ctx.write(response);
-        return keepAlive;
+
+            @Override
+            public STATE onBodyPartReceived(HttpResponseBodyPart httpResponseBodyPart)
+                    throws Exception {
+                System.out.println("1111111111111111111111111111111111");
+                byte[] bytes = httpResponseBodyPart.getBodyPartBytes();
+                System.out.print(new String(bytes));
+//                ByteBuf buf = ctx.alloc().buffer(bytes.length).setBytes(0, bytes);
+                ByteBuf buf = Unpooled.copiedBuffer(bytes);
+                ctx.write(new DefaultHttpContent(buf));
+                return STATE.CONTINUE;
+            }
+
+            @Override
+            public STATE onStatusReceived(HttpResponseStatus httpResponseStatus) throws Exception {
+                System.out.println("2222222222222222222222222222222222");
+                HttpVersion version = new HttpVersion(httpResponseStatus.getProtocolName(),
+                        httpResponseStatus.getProtocolMajorVersion(), httpResponseStatus
+                        .getProtocolMinorVersion(), true);
+                response.setProtocolVersion(version);
+
+                io.netty.handler.codec.http.HttpResponseStatus status =
+                        new io.netty.handler.codec.http.HttpResponseStatus(httpResponseStatus
+                                .getStatusCode(), httpResponseStatus.getStatusText());
+                response.setStatus(status);
+                return STATE.CONTINUE;
+            }
+
+            @Override
+            public STATE onHeadersReceived(HttpResponseHeaders httpResponseHeaders)
+                    throws Exception {
+                System.out.println("3333333333333333333333333333333333");
+                Set<Map.Entry<String, List<String>>> headers =
+                        httpResponseHeaders.getHeaders().entrySet();
+                headers.stream().forEach(entry ->
+                        entry.getValue().stream().forEach(value ->
+                        response.headers().add(entry.getKey(), value)));
+
+                ctx.write(response);
+                return STATE.CONTINUE;
+            }
+
+            @Override
+            public String onCompleted() throws Exception {
+                System.out.println("4444444444444444444444444444444444");
+                if (!keepAlive) {
+                    ctx.writeAndFlush(LastHttpContent.EMPTY_LAST_CONTENT).
+                            addListener(ChannelFutureListener.CLOSE);
+                } else {
+                    ctx.writeAndFlush(LastHttpContent.EMPTY_LAST_CONTENT);
+                }
+                return "Done";
+            }
+        });
+    }
+
+    private static void sendError(ChannelHandlerContext ctx,
+                                  io.netty.handler.codec.http.HttpResponseStatus status) {
+        FullHttpResponse response = new DefaultFullHttpResponse( HTTP_1_1, status,
+                Unpooled.copiedBuffer("Failure: " + status + "\r\n", CharsetUtil.UTF_8));
+        response.headers().set("Content-type", "text/plain; charset=UTF-8");
+
+        ctx.writeAndFlush(response).addListener(ChannelFutureListener.CLOSE);
     }
 
     private static void send100Continue(ChannelHandlerContext ctx) {
@@ -164,7 +184,7 @@ public class HttpProxyServerHandler extends SimpleChannelInboundHandler<Object> 
 
     @Override
     public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {
-        cause.printStackTrace();
+        sendError(ctx, io.netty.handler.codec.http.HttpResponseStatus.BAD_REQUEST);
         ctx.close();
     }
 }
