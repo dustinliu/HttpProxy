@@ -82,11 +82,50 @@ public class HttpProxyServerHandler extends SimpleChannelInboundHandler<Object> 
     @Override
     protected void channelRead0(ChannelHandlerContext ctx, Object msg) {
         if (msg instanceof HttpRequest) {
-            LOGGER.debug("HttpRequest received");
-            this.request = (HttpRequest) msg;
-            if (HttpHeaders.is100ContinueExpected(request)) {
-                send100Continue(ctx);
+            HttpRequest httpRequest = (HttpRequest) msg;
+            handlerHttpRequest(ctx, httpRequest);
+        } else if (msg instanceof HttpContent) {
+            HttpContent httpContent = (HttpContent) msg;
+            handleHttpContent(ctx, httpContent);
+        }
+    }
+
+    /**
+     * Handle {@link HttpContent} message.
+     *
+     * @param ctx the {@link ChannelHandlerContext}
+     * @param httpContent the message to handle
+     */
+    private void handleHttpContent(ChannelHandlerContext ctx, HttpContent httpContent) {
+        ByteBuf content = httpContent.content();
+        try {
+            writeContent(content);
+        } catch (IOException e) {
+            sendError(ctx, io.netty.handler.codec.http.HttpResponseStatus.INTERNAL_SERVER_ERROR,
+                    e.getMessage());
+            return;
+        }
+        if (httpContent instanceof LastHttpContent) {
+            try {
+                writeResponse(ctx);
+            } catch (IOException | YCAException e) {
+                sendError(ctx, io.netty.handler.codec.http.HttpResponseStatus.BAD_REQUEST, e.getMessage());
             }
+        }
+    }
+
+    /**
+     * Handler {@link HttpRequest} message.
+     *
+     * @param ctx the {@link ChannelHandlerContext}
+     * @param msg the message to handle
+     */
+    private void handlerHttpRequest(ChannelHandlerContext ctx, HttpRequest msg) {
+        LOGGER.debug("HttpRequest received");
+        this.request = msg;
+        if (HttpHeaders.is100ContinueExpected(request)) {
+            send100Continue(ctx);
+        }
 
             requestBuilder = new RequestBuilder();
             LOGGER.debug("METHOD: " + request.getMethod().name());
@@ -111,34 +150,10 @@ public class HttpProxyServerHandler extends SimpleChannelInboundHandler<Object> 
                 return;
             }
 
-            try {
-                tmpContent = File.createTempFile(TMP_PREFIX, null);
-            } catch (IOException e) {
-                sendError(ctx, io.netty.handler.codec.http.HttpResponseStatus.INTERNAL_SERVER_ERROR, e.getMessage());
-                return;
-            }
-        }
-
-        if (msg instanceof HttpContent) {
-            HttpContent httpContent = (HttpContent) msg;
-            ByteBuf content = httpContent.content();
-            if (content.isReadable()) {
-                try {
-                    writeContent(content.array());
-                } catch (IOException e) {
-                    sendError(ctx, io.netty.handler.codec.http.HttpResponseStatus.INTERNAL_SERVER_ERROR,
-                            e.getMessage());
-                    return;
-                }
-            }
-            if (msg instanceof LastHttpContent) {
-                try {
-                    writeResponse(ctx);
-                } catch (IOException e) {
-                    sendError(ctx, io.netty.handler.codec.http.HttpResponseStatus.BAD_REQUEST, e.getMessage());
-                    return;
-                }
-            }
+        try {
+            tmpContent = File.createTempFile(TMP_PREFIX, null);
+        } catch (IOException e) {
+            sendError(ctx, io.netty.handler.codec.http.HttpResponseStatus.INTERNAL_SERVER_ERROR, e.getMessage());
         }
     }
 
@@ -148,11 +163,13 @@ public class HttpProxyServerHandler extends SimpleChannelInboundHandler<Object> 
      * @param content the content to write
      * @throws IOException when write failed
      */
-    private void writeContent(byte[] content) throws IOException {
+    private void writeContent(ByteBuf content) throws IOException {
+        if (!content.isReadable()) {
+            return;
+        }
+
         try (FileOutputStream outputStream = new FileOutputStream(tmpContent, true)) {
-            outputStream.write(content);
-        } catch (IOException e) {
-            throw e;
+            outputStream.write(content.array());
         }
 
     }
@@ -174,7 +191,7 @@ public class HttpProxyServerHandler extends SimpleChannelInboundHandler<Object> 
         }
 
         URL url = new URL(uri); // the uri part may contain full URL
-        StringBuffer buffer = new StringBuffer();
+        StringBuilder buffer = new StringBuilder();
         buffer.append(url.getProtocol()).append("://").append(host).append(url.getPath());
         if (url.getQuery() != null) {
             buffer.append('?').append(url.getQuery());
