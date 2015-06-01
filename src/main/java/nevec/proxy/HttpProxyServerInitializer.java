@@ -21,14 +21,12 @@ public class HttpProxyServerInitializer extends ChannelInitializer<SocketChannel
             p.addLast(sslCtx.newHandler(ch.alloc()));
         }
 
-        String scheme = sslCtx == null ? "http://" : "https://";
-
         p.addLast(new HttpServerCodec());
 //        p.addLast(new HttpRequestDecoder());
 //        p.addLast(new HttpObjectAggregator(1048576));
 //        p.addLast(new HttpResponseEncoder());
 //        p.addLast(new HttpContentCompressor());
 //        p.addLast(new ChunkedWriteHandler());
-        p.addLast(new HttpProxyServerHandler(scheme));
+        p.addLast(new HttpProxyServerHandler());
     }
 }

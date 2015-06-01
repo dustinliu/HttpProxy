@@ -1,9 +1,11 @@
-package com.yahoo.nevec.proxy;
+package nevec.proxy;
 
 import static io.netty.handler.codec.http.HttpResponseStatus.CONTINUE;
 import static io.netty.handler.codec.http.HttpResponseStatus.OK;
 import static io.netty.handler.codec.http.HttpVersion.HTTP_1_1;
 
+import java.io.File;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.net.MalformedURLException;
 import java.net.URL;
@@ -46,6 +48,8 @@ public class HttpProxyServerHandler extends SimpleChannelInboundHandler<Object> 
     private HttpRequest request;
     /** The http client request builder. */
     private RequestBuilder requestBuilder;
+    /** tmp file to store the large content. */
+    private File tmpContent;
 
     /** The httpClient. */
     private static AsyncHttpClient httpClient;
@@ -55,12 +59,10 @@ public class HttpProxyServerHandler extends SimpleChannelInboundHandler<Object> 
     private static final int MAX_RETRY = 5;
     /** the host header string. */
     private static final String HOST_HEADER = "HOST";
-//    /** yca header string. */
-//    private static final String YCA_AUTH_HEADER = "Yahoo-App-Auth";
+    /** the prefix of tmp file. */
+    private static final String TMP_PREFIX = "http_proxy";
     /** logger. */
     private static final Logger LOGGER = LoggerFactory.getLogger(HttpProxyServerHandler.class);
-//    /** yca db. */
-//    private static CertDatabase cdb = null;
 
     static  {
         AsyncHttpClientConfig config = new AsyncHttpClientConfig.Builder()
@@ -70,13 +72,6 @@ public class HttpProxyServerHandler extends SimpleChannelInboundHandler<Object> 
                 .setMaxRequestRetry(MAX_RETRY)
                 .build();
         httpClient = new AsyncHttpClient(config);
-
-//        try {
-//            cdb = new CertDatabase();
-//        } catch (YCAException e) {
-//            LOGGER.error("yca initial failed: " + e.getMessage());
-//            throw new RuntimeException("yca initial failed");
-//        }
     }
 
     @Override
@@ -94,6 +89,7 @@ public class HttpProxyServerHandler extends SimpleChannelInboundHandler<Object> 
             }
 
             requestBuilder = new RequestBuilder();
+            LOGGER.debug("METHOD: " + request.getMethod().name());
             requestBuilder.setMethod(request.getMethod().name());
 
             LOGGER.debug("============ request headers ===============");
@@ -114,17 +110,51 @@ public class HttpProxyServerHandler extends SimpleChannelInboundHandler<Object> 
                 sendError(ctx, io.netty.handler.codec.http.HttpResponseStatus.BAD_REQUEST, e.getMessage());
                 return;
             }
+
+            try {
+                tmpContent = File.createTempFile(TMP_PREFIX, null);
+            } catch (IOException e) {
+                sendError(ctx, io.netty.handler.codec.http.HttpResponseStatus.INTERNAL_SERVER_ERROR, e.getMessage());
+                return;
+            }
         }
+
         if (msg instanceof HttpContent) {
-            LOGGER.debug("xxxxxxxxxxxxxxxxxxxxxxx");
+            HttpContent httpContent = (HttpContent) msg;
+            ByteBuf content = httpContent.content();
+            if (content.isReadable()) {
+                try {
+                    writeContent(content.array());
+                } catch (IOException e) {
+                    sendError(ctx, io.netty.handler.codec.http.HttpResponseStatus.INTERNAL_SERVER_ERROR,
+                            e.getMessage());
+                    return;
+                }
+            }
             if (msg instanceof LastHttpContent) {
                 try {
                     writeResponse(ctx);
                 } catch (IOException e) {
                     sendError(ctx, io.netty.handler.codec.http.HttpResponseStatus.BAD_REQUEST, e.getMessage());
+                    return;
                 }
             }
         }
+    }
+
+    /**
+     * Write post/put content to tmp file.
+     *
+     * @param content the content to write
+     * @throws IOException when write failed
+     */
+    private void writeContent(byte[] content) throws IOException {
+        try (FileOutputStream outputStream = new FileOutputStream(tmpContent, true)) {
+            outputStream.write(content);
+        } catch (IOException e) {
+            throw e;
+        }
+
     }
 
     /**
@@ -165,7 +195,9 @@ public class HttpProxyServerHandler extends SimpleChannelInboundHandler<Object> 
         // Build the response object.
 
         final HttpResponse response = new DefaultHttpResponse(HTTP_1_1, OK);
-//        requestBuilder.addHeader(YCA_AUTH_HEADER, cdb.getCert(""));
+        if (tmpContent.length() != 0) {
+            requestBuilder.setBody(tmpContent);
+        }
         httpClient.executeRequest(requestBuilder.build(), new AsyncHandler<String>() {
             @Override
             public void onThrowable(Throwable throwable) {
@@ -214,12 +246,14 @@ public class HttpProxyServerHandler extends SimpleChannelInboundHandler<Object> 
 
             @Override
             public String onCompleted() throws Exception {
-                LOGGER.debug("http client request comoleted");
+                LOGGER.debug("http client request completed");
+                tmpContent.delete();
                 if (!keepAlive) {
                     ctx.writeAndFlush(LastHttpContent.EMPTY_LAST_CONTENT).addListener(ChannelFutureListener.CLOSE);
                 } else {
                     ctx.writeAndFlush(LastHttpContent.EMPTY_LAST_CONTENT);
                 }
+
                 return "Done";
             }
         });
@@ -238,6 +272,7 @@ public class HttpProxyServerHandler extends SimpleChannelInboundHandler<Object> 
         FullHttpResponse response = new DefaultFullHttpResponse(HTTP_1_1, status,
                 Unpooled.copiedBuffer("Failure: " + status + ", " + message + "\r\n", CharsetUtil.UTF_8));
         response.headers().set("Content-type", "text/plain; charset=UTF-8");
+        LOGGER.info("operation failed, status(" + status + "), " + message);
 
         ctx.writeAndFlush(response).addListener(ChannelFutureListener.CLOSE);
     }
