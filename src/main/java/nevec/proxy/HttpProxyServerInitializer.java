@@ -10,6 +10,9 @@ public class HttpProxyServerInitializer extends ChannelInitializer<SocketChannel
 
     private final SslContext sslCtx;
 
+    private final static String HTTP_CODEC_NAME = "httpCodec";
+    private final static String HTTP_PROXY_NAME = "httpProxy";
+
     public HttpProxyServerInitializer(SslContext sslCtx) {
         this.sslCtx = sslCtx;
     }
@@ -21,12 +24,7 @@ public class HttpProxyServerInitializer extends ChannelInitializer<SocketChannel
             p.addLast(sslCtx.newHandler(ch.alloc()));
         }
 
-        p.addLast(new HttpServerCodec());
-//        p.addLast(new HttpRequestDecoder());
-//        p.addLast(new HttpObjectAggregator(1048576));
-//        p.addLast(new HttpResponseEncoder());
-//        p.addLast(new HttpContentCompressor());
-//        p.addLast(new ChunkedWriteHandler());
-        p.addLast(new HttpProxyServerHandler());
+        p.addLast(HTTP_CODEC_NAME, new HttpServerCodec());
+        p.addLast(HTTP_PROXY_NAME, new HttpProxyServerHandler());
     }
 }
