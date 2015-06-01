@@ -23,6 +23,7 @@ import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.SimpleChannelInboundHandler;
 import io.netty.handler.codec.http.DefaultFullHttpResponse;
 import io.netty.handler.codec.http.DefaultHttpContent;
+import io.netty.handler.codec.http.DefaultHttpResponse;
 import io.netty.handler.codec.http.FullHttpResponse;
 import io.netty.handler.codec.http.HttpContent;
 import io.netty.handler.codec.http.HttpHeaders;
@@ -106,7 +107,7 @@ public class HttpProxyServerHandler extends SimpleChannelInboundHandler<Object> 
         boolean keepAlive = HttpHeaders.isKeepAlive(request);
         // Build the response object.
 
-        final HttpResponse response = new DefaultFullHttpResponse(HTTP_1_1, OK);
+        final HttpResponse response = new DefaultHttpResponse(HTTP_1_1, OK);
         httpClient.executeRequest(requestBuilder.build(), new AsyncHandler<String>() {
             @Override
             public void onThrowable(Throwable throwable) {
