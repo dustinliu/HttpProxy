@@ -17,3 +17,7 @@ hs_err_pid*
 
 # maven
 target/
+
+# gradle
+.gradle
+build/

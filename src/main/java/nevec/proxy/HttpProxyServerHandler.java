@@ -108,7 +108,7 @@ public class HttpProxyServerHandler extends SimpleChannelInboundHandler<Object> 
         if (httpContent instanceof LastHttpContent) {
             try {
                 writeResponse(ctx);
-            } catch (IOException | YCAException e) {
+            } catch (IOException e) {
                 sendError(ctx, io.netty.handler.codec.http.HttpResponseStatus.BAD_REQUEST, e.getMessage());
             }
         }
@@ -146,14 +146,16 @@ public class HttpProxyServerHandler extends SimpleChannelInboundHandler<Object> 
             try {
                 requestBuilder.setUrl(getUrl());
             } catch (MalformedURLException e) {
-                sendError(ctx, io.netty.handler.codec.http.HttpResponseStatus.BAD_REQUEST, e.getMessage());
+                sendError(ctx, io.netty.handler.codec.http.HttpResponseStatus.BAD_REQUEST,
+                        e.getMessage());
                 return;
             }
 
         try {
             tmpContent = File.createTempFile(TMP_PREFIX, null);
         } catch (IOException e) {
-            sendError(ctx, io.netty.handler.codec.http.HttpResponseStatus.INTERNAL_SERVER_ERROR, e.getMessage());
+            sendError(ctx, io.netty.handler.codec.http.HttpResponseStatus.INTERNAL_SERVER_ERROR,
+                    e.getMessage());
         }
     }
 
