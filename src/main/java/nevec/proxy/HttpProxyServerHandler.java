@@ -5,6 +5,8 @@ import static io.netty.handler.codec.http.HttpResponseStatus.OK;
 import static io.netty.handler.codec.http.HttpVersion.HTTP_1_1;
 
 import java.io.IOException;
+import java.net.MalformedURLException;
+import java.net.URL;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -32,6 +34,8 @@ import io.netty.handler.codec.http.HttpResponse;
 import io.netty.handler.codec.http.HttpVersion;
 import io.netty.handler.codec.http.LastHttpContent;
 import io.netty.util.CharsetUtil;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class HttpProxyServerHandler extends SimpleChannelInboundHandler<Object> {
 
@@ -44,6 +48,7 @@ public class HttpProxyServerHandler extends SimpleChannelInboundHandler<Object> 
     private static final int CONNECTION_LIFETIME = 100000;
     private static final int MAX_RETRY = 5;
     private static final String HOST_HEADER = "HOST";
+    private static final Logger logger = LoggerFactory.getLogger(HttpProxyServerHandler.class);
 
     static  {
         AsyncHttpClientConfig config = new AsyncHttpClientConfig.Builder()
@@ -68,6 +73,7 @@ public class HttpProxyServerHandler extends SimpleChannelInboundHandler<Object> 
     @Override
     protected void channelRead0(ChannelHandlerContext ctx, Object msg) {
         if (msg instanceof HttpRequest) {
+            logger.debug("HttpRequest received");
             HttpRequest request = this.request = (HttpRequest) msg;
             if (HttpHeaders.is100ContinueExpected(request)) {
                 send100Continue(ctx);
@@ -76,17 +82,24 @@ public class HttpProxyServerHandler extends SimpleChannelInboundHandler<Object> 
             requestBuilder = new RequestBuilder();
             requestBuilder.setMethod(request.getMethod().name());
 
+            logger.debug("============ request headers ===============");
             HttpHeaders headers = request.headers();
             if (!headers.isEmpty()) {
                 for (Map.Entry<String, String> h : headers) {
                     String key = h.getKey();
                     String value = h.getValue();
                     requestBuilder.addHeader(key, value);
+                    logger.debug("[" + key + "] : [" + value + "]");
                 }
             }
+            logger.debug("========= request headers done ===============");
 
-            String url = scheme + request.headers().get(HOST_HEADER) + request.getUri();
-            requestBuilder.setUrl(url);
+            try {
+                requestBuilder.setUrl(getUrl(request));
+            } catch (MalformedURLException e) {
+                sendError(ctx, io.netty.handler.codec.http.HttpResponseStatus.BAD_REQUEST);
+                return;
+            }
         }
         if (msg instanceof HttpContent) {
             HttpContent httpContent = (HttpContent) msg;
@@ -103,6 +116,25 @@ public class HttpProxyServerHandler extends SimpleChannelInboundHandler<Object> 
         }
     }
 
+    private String getUrl(HttpRequest request) throws MalformedURLException {
+        String host = request.headers().get(HOST_HEADER);
+        String uri = request.getUri();
+        logger.debug("HOST: [" + host + "]");
+        logger.debug("URI: [" + uri + "]");
+        if (host == null) {
+            return uri;
+        }
+
+        URL url = new URL(uri); // the uri part may contain full URL
+        String ret = url.getProtocol() + "://" + host + url.getPath();
+        if (url.getQuery() != null) {
+            ret += "?" + url.getQuery();
+        }
+
+        logger.debug("URL: [" + ret + "]");
+        return ret;
+    }
+
     private void writeResponse(ChannelHandlerContext ctx) throws IOException {
         boolean keepAlive = HttpHeaders.isKeepAlive(request);
         // Build the response object.
@@ -111,16 +143,15 @@ public class HttpProxyServerHandler extends SimpleChannelInboundHandler<Object> 
         httpClient.executeRequest(requestBuilder.build(), new AsyncHandler<String>() {
             @Override
             public void onThrowable(Throwable throwable) {
+                logger.warn("http client got exception, " + throwable.getMessage());
                 sendError(ctx, io.netty.handler.codec.http.HttpResponseStatus.BAD_REQUEST);
             }
 
             @Override
             public STATE onBodyPartReceived(HttpResponseBodyPart httpResponseBodyPart)
                     throws Exception {
-                System.out.println("1111111111111111111111111111111111");
                 byte[] bytes = httpResponseBodyPart.getBodyPartBytes();
-                System.out.print(new String(bytes));
-//                ByteBuf buf = ctx.alloc().buffer(bytes.length).setBytes(0, bytes);
+                logger.debug("http client body pard received, length:" + String.valueOf(bytes.length));
                 ByteBuf buf = Unpooled.copiedBuffer(bytes);
                 ctx.write(new DefaultHttpContent(buf));
                 return STATE.CONTINUE;
@@ -128,10 +159,10 @@ public class HttpProxyServerHandler extends SimpleChannelInboundHandler<Object> 
 
             @Override
             public STATE onStatusReceived(HttpResponseStatus httpResponseStatus) throws Exception {
-                System.out.println("2222222222222222222222222222222222");
+                logger.debug("http client staus received");
                 HttpVersion version = new HttpVersion(httpResponseStatus.getProtocolName(),
                         httpResponseStatus.getProtocolMajorVersion(), httpResponseStatus
-                        .getProtocolMinorVersion(), true);
+                        .getProtocolMinorVersion(), false);
                 response.setProtocolVersion(version);
 
                 io.netty.handler.codec.http.HttpResponseStatus status =
@@ -144,12 +175,12 @@ public class HttpProxyServerHandler extends SimpleChannelInboundHandler<Object> 
             @Override
             public STATE onHeadersReceived(HttpResponseHeaders httpResponseHeaders)
                     throws Exception {
-                System.out.println("3333333333333333333333333333333333");
+                logger.debug("http client headers received");
                 Set<Map.Entry<String, List<String>>> headers =
                         httpResponseHeaders.getHeaders().entrySet();
                 headers.stream().forEach(entry ->
                         entry.getValue().stream().forEach(value ->
-                        response.headers().add(entry.getKey(), value)));
+                                response.headers().add(entry.getKey(), value)));
 
                 ctx.write(response);
                 return STATE.CONTINUE;
@@ -157,7 +188,7 @@ public class HttpProxyServerHandler extends SimpleChannelInboundHandler<Object> 
 
             @Override
             public String onCompleted() throws Exception {
-                System.out.println("4444444444444444444444444444444444");
+                logger.debug("http client request comoleted");
                 if (!keepAlive) {
                     ctx.writeAndFlush(LastHttpContent.EMPTY_LAST_CONTENT).
                             addListener(ChannelFutureListener.CLOSE);
@@ -185,6 +216,7 @@ public class HttpProxyServerHandler extends SimpleChannelInboundHandler<Object> 
 
     @Override
     public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {
+        logger.warn("exception caught: " + cause.getMessage());
         sendError(ctx, io.netty.handler.codec.http.HttpResponseStatus.BAD_REQUEST);
         ctx.close();
     }
