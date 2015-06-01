@@ -1,14 +1,17 @@
-package nevec.proxy;
+package dustinl.proxy;
 
 import io.netty.channel.ChannelInitializer;
 import io.netty.channel.ChannelPipeline;
 import io.netty.channel.socket.SocketChannel;
 import io.netty.handler.codec.http.HttpServerCodec;
 
+/**
+ * Http proxy server initializer.
+ */
 public class HttpProxyServerInitializer extends ChannelInitializer<SocketChannel> {
 
-    private final static String HTTP_CODEC_NAME = "httpCodec";
-    private final static String HTTP_PROXY_NAME = "httpProxy";
+    private static final String HTTP_CODEC_NAME = "httpCodec";
+    private static final String HTTP_PROXY_NAME = "httpProxy";
 
     @Override
     public void initChannel(SocketChannel ch) {

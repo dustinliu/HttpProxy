@@ -21,3 +21,6 @@ target/
 # gradle
 .gradle
 build/
+
+checkstyle.xml
+pmd.xml

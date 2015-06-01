@@ -1,4 +1,4 @@
-package nevec.proxy;
+package dustinl.proxy;
 
 import static io.netty.handler.codec.http.HttpResponseStatus.CONTINUE;
 import static io.netty.handler.codec.http.HttpResponseStatus.OK;
