@@ -11,12 +11,14 @@ import io.netty.handler.codec.http.HttpServerCodec;
 public class HttpProxyServerInitializer extends ChannelInitializer<SocketChannel> {
 
     private static final String HTTP_CODEC_NAME = "httpCodec";
-    private static final String HTTP_PROXY_NAME = "httpProxy";
+    private static final String HTTP_EXEC_NAME = "httpExec";
+    private static final String HTTP_WRITER_NAME = "httpWriter";
 
     @Override
     public void initChannel(SocketChannel ch) {
         ChannelPipeline p = ch.pipeline();
         p.addLast(HTTP_CODEC_NAME, new HttpServerCodec());
-        p.addLast(HTTP_PROXY_NAME, new HttpProxyServerHandler());
+        p.addLast(HTTP_EXEC_NAME, new HttpProxyExecHandler());
+        p.addLast(HTTP_WRITER_NAME, new HttpProxyWriterHandler());
     }
 }

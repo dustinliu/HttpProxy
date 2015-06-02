@@ -12,6 +12,7 @@ import java.net.URL;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.Future;
 
 import com.ning.http.client.AsyncHandler;
 import com.ning.http.client.AsyncHttpClient;
@@ -26,7 +27,6 @@ import io.netty.channel.ChannelFutureListener;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.SimpleChannelInboundHandler;
 import io.netty.handler.codec.http.DefaultFullHttpResponse;
-import io.netty.handler.codec.http.DefaultHttpContent;
 import io.netty.handler.codec.http.DefaultHttpResponse;
 import io.netty.handler.codec.http.FullHttpResponse;
 import io.netty.handler.codec.http.HttpContent;
@@ -42,7 +42,7 @@ import org.slf4j.LoggerFactory;
 /**
  * The http proxy server handler to handle http request.
  */
-public class HttpProxyServerHandler extends SimpleChannelInboundHandler<Object> {
+public class HttpProxyExecHandler extends SimpleChannelInboundHandler<Object> {
 
     /** The http request. */
     private HttpRequest request;
@@ -62,7 +62,7 @@ public class HttpProxyServerHandler extends SimpleChannelInboundHandler<Object> 
     /** the prefix of tmp file. */
     private static final String TMP_PREFIX = "http_proxy";
     /** logger. */
-    private static final Logger LOGGER = LoggerFactory.getLogger(HttpProxyServerHandler.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(HttpProxyExecHandler.class);
 
     static  {
         AsyncHttpClientConfig config = new AsyncHttpClientConfig.Builder()
@@ -82,8 +82,8 @@ public class HttpProxyServerHandler extends SimpleChannelInboundHandler<Object> 
     @Override
     protected void channelRead0(ChannelHandlerContext ctx, Object msg) {
         if (msg instanceof HttpRequest) {
-            HttpRequest httpRequest = (HttpRequest) msg;
-            handlerHttpRequest(ctx, httpRequest);
+            this.request = (HttpRequest) msg;
+            handlerHttpRequest(ctx);
         } else if (msg instanceof HttpContent) {
             HttpContent httpContent = (HttpContent) msg;
             handleHttpContent(ctx, httpContent);
@@ -118,38 +118,35 @@ public class HttpProxyServerHandler extends SimpleChannelInboundHandler<Object> 
      * Handler {@link HttpRequest} message.
      *
      * @param ctx the {@link ChannelHandlerContext}
-     * @param msg the message to handle
      */
-    private void handlerHttpRequest(ChannelHandlerContext ctx, HttpRequest msg) {
+    private void handlerHttpRequest(ChannelHandlerContext ctx) {
         LOGGER.debug("HttpRequest received");
-        this.request = msg;
         if (HttpHeaders.is100ContinueExpected(request)) {
             send100Continue(ctx);
         }
 
-            requestBuilder = new RequestBuilder();
-            LOGGER.debug("METHOD: " + request.getMethod().name());
-            requestBuilder.setMethod(request.getMethod().name());
+        requestBuilder = new RequestBuilder();
+        LOGGER.debug("METHOD: " + request.getMethod().name());
+        requestBuilder.setMethod(request.getMethod().name());
 
-            LOGGER.debug("============ request headers ===============");
-            HttpHeaders headers = request.headers();
-            if (!headers.isEmpty()) {
-                for (Map.Entry<String, String> h : headers) {
-                    String key = h.getKey();
-                    String value = h.getValue();
-                    requestBuilder.addHeader(key, value);
-                    LOGGER.debug("[" + key + "] : [" + value + "]");
-                }
+        LOGGER.debug("============ request headers ===============");
+        HttpHeaders headers = request.headers();
+        if (!headers.isEmpty()) {
+            for (Map.Entry<String, String> h : headers) {
+                String key = h.getKey();
+                String value = h.getValue();
+                requestBuilder.addHeader(key, value);
+                LOGGER.debug("[" + key + "] : [" + value + "]");
             }
-            LOGGER.debug("========= request headers done ===============");
+        }
+        LOGGER.debug("========= request headers done ===============");
 
-            try {
-                requestBuilder.setUrl(getUrl());
-            } catch (MalformedURLException e) {
-                sendError(ctx, io.netty.handler.codec.http.HttpResponseStatus.BAD_REQUEST,
-                        e.getMessage());
-                return;
-            }
+        try {
+            requestBuilder.setUrl(getUrl());
+        } catch (MalformedURLException e) {
+            sendError(ctx, io.netty.handler.codec.http.HttpResponseStatus.BAD_REQUEST,
+                    e.getMessage());
+        }
 
         try {
             tmpContent = File.createTempFile(TMP_PREFIX, null);
@@ -173,7 +170,6 @@ public class HttpProxyServerHandler extends SimpleChannelInboundHandler<Object> 
         try (FileOutputStream outputStream = new FileOutputStream(tmpContent, true)) {
             outputStream.write(content.array());
         }
-
     }
 
     /**
@@ -213,11 +209,16 @@ public class HttpProxyServerHandler extends SimpleChannelInboundHandler<Object> 
         boolean keepAlive = HttpHeaders.isKeepAlive(request);
         // Build the response object.
 
-        final HttpResponse response = new DefaultHttpResponse(HTTP_1_1, OK);
         if (tmpContent.length() != 0) {
             requestBuilder.setBody(tmpContent);
         }
-        httpClient.executeRequest(requestBuilder.build(), new AsyncHandler<String>() {
+
+        Future<FullHttpResponse> future =
+                httpClient.executeRequest(requestBuilder.build(), new AsyncHandler<FullHttpResponse>() {
+
+            private ByteBuf buf = ctx.alloc().buffer();
+            private HttpResponse httpResponse = new DefaultHttpResponse(HTTP_1_1, OK);
+
             @Override
             public void onThrowable(Throwable throwable) {
                 LOGGER.warn("http client got exception, " + throwable.getMessage());
@@ -228,24 +229,23 @@ public class HttpProxyServerHandler extends SimpleChannelInboundHandler<Object> 
             public STATE onBodyPartReceived(HttpResponseBodyPart httpResponseBodyPart)
                     throws Exception {
                 byte[] bytes = httpResponseBodyPart.getBodyPartBytes();
-                LOGGER.debug("http client body pard received, length:" + String.valueOf(bytes.length));
-                ByteBuf buf = Unpooled.copiedBuffer(bytes);
-                ctx.write(new DefaultHttpContent(buf));
+                LOGGER.debug("http client body part received, length:" + String.valueOf(bytes.length));
+                buf.writeBytes(bytes);
                 return STATE.CONTINUE;
             }
 
             @Override
             public STATE onStatusReceived(HttpResponseStatus httpResponseStatus) throws Exception {
-                LOGGER.debug("http client staus received");
+                LOGGER.debug("http client status received");
                 HttpVersion version = new HttpVersion(httpResponseStatus.getProtocolName(),
                         httpResponseStatus.getProtocolMajorVersion(), httpResponseStatus
                         .getProtocolMinorVersion(), false);
-                response.setProtocolVersion(version);
+                httpResponse.setProtocolVersion(version);
 
                 io.netty.handler.codec.http.HttpResponseStatus status =
                         new io.netty.handler.codec.http.HttpResponseStatus(httpResponseStatus.getStatusCode(),
                                 httpResponseStatus.getStatusText());
-                response.setStatus(status);
+                httpResponse.setStatus(status);
                 return STATE.CONTINUE;
             }
 
@@ -253,29 +253,26 @@ public class HttpProxyServerHandler extends SimpleChannelInboundHandler<Object> 
             public STATE onHeadersReceived(HttpResponseHeaders httpResponseHeaders)
                     throws Exception {
                 LOGGER.debug("http client headers received");
-                Set<Map.Entry<String, List<String>>> headers =
-                        httpResponseHeaders.getHeaders().entrySet();
-                headers.stream().forEach(entry ->
-                        entry.getValue().stream().forEach(value ->
-                                response.headers().add(entry.getKey(), value)));
+                Set<Map.Entry<String, List<String>>> headers = httpResponseHeaders.getHeaders().entrySet();
+                headers.stream().forEach(entry -> entry.getValue().stream().forEach(value ->
+                        httpResponse.headers().add(entry.getKey(), value)));
 
-                ctx.write(response);
                 return STATE.CONTINUE;
             }
 
             @Override
-            public String onCompleted() throws Exception {
+            public FullHttpResponse onCompleted() throws Exception {
                 LOGGER.debug("http client request completed");
                 tmpContent.delete();
-                if (!keepAlive) {
-                    ctx.writeAndFlush(LastHttpContent.EMPTY_LAST_CONTENT).addListener(ChannelFutureListener.CLOSE);
-                } else {
-                    ctx.writeAndFlush(LastHttpContent.EMPTY_LAST_CONTENT);
-                }
-
-                return "Done";
+                return new DefaultFullHttpResponse(
+                        httpResponse.getProtocolVersion(),
+                        httpResponse.getStatus(),
+                        buf
+                );
             }
         });
+
+        ctx.fireChannelRead(future);
     }
 
     /**
