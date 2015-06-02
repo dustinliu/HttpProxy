@@ -1,9 +1,21 @@
 package dustinl.proxy;
 
-public class ProxyConfigFactory {
-    private static final ProxyConfig config = new  TypeSafeProxyConfig();
+/**
+ * The factory to get config singleton.
+ */
+public final class ProxyConfigFactory {
+    private static final ProxyConfig CONFIG = new  TypeSafeProxyConfig();
 
+    /**
+     * Gets config.
+     *
+     * @return the config
+     */
     public static ProxyConfig getConfig() {
-        return config;
+        return CONFIG;
+    }
+
+    private ProxyConfigFactory() {
+
     }
 }

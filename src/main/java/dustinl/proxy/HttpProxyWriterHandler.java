@@ -8,11 +8,14 @@ import io.netty.channel.SimpleChannelInboundHandler;
 import io.netty.handler.codec.http.FullHttpResponse;
 import io.netty.handler.codec.http.HttpHeaders;
 
+/**
+ * get {@Flink FullHttpResponse} from future and write to context.
+ */
 public class HttpProxyWriterHandler extends SimpleChannelInboundHandler<Future<FullHttpResponse>> {
 
     @Override
     protected void channelRead0(ChannelHandlerContext ctx, Future<FullHttpResponse> msg) throws Exception {
-        FullHttpResponse response= msg.get();
+        FullHttpResponse response = msg.get();
         if (!HttpHeaders.isKeepAlive(response)) {
             ctx.writeAndFlush(response).addListener(ChannelFutureListener.CLOSE);
         } else {

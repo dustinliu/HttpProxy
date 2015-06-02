@@ -13,7 +13,7 @@ import io.netty.handler.logging.LoggingHandler;
  */
 public final class HttpProxyServer {
 
-    private static final ProxyConfig config = ProxyConfigFactory.getConfig();
+    private static ProxyConfig config = ProxyConfigFactory.getConfig();
 
     /**
      * The entry point of application.

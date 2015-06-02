@@ -279,7 +279,7 @@ public class HttpProxyExecHandler extends SimpleChannelInboundHandler<Object> {
                 LOGGER.debug("http client request completed");
                 tmpContent.delete();
                 FullHttpResponse fullHttpResponse =
-                        new DefaultFullHttpResponse( httpResponse.getProtocolVersion(), httpResponse .getStatus(), buf);
+                        new DefaultFullHttpResponse(httpResponse.getProtocolVersion(), httpResponse .getStatus(), buf);
                 fullHttpResponse.headers().add(httpResponse.headers());
                 return fullHttpResponse;
             }
