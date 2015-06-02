@@ -24,3 +24,5 @@ build/
 
 checkstyle.xml
 pmd.xml
+
+logs/

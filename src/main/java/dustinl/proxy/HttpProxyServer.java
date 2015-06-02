@@ -23,8 +23,8 @@ public final class HttpProxyServer {
      */
     public static void main(String[] args) throws Exception {
         // Configure the server.
-        EventLoopGroup bossGroup = new NioEventLoopGroup(1);
-        EventLoopGroup workerGroup = new NioEventLoopGroup();
+        EventLoopGroup bossGroup = new NioEventLoopGroup(config.getBossThreads());
+        EventLoopGroup workerGroup = new NioEventLoopGroup(config.getWorkerThreads());
         try {
             ServerBootstrap b = new ServerBootstrap();
             b.group(bossGroup, workerGroup)

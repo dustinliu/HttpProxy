@@ -139,7 +139,7 @@ public class HttpProxyExecHandler extends SimpleChannelInboundHandler<Object> {
                 LOGGER.debug("[" + key + "] : [" + value + "]");
             }
         }
-        LOGGER.debug("========= request headers done ===============");
+        LOGGER.debug("============================================");
 
         try {
             requestBuilder.setUrl(getUrl());
@@ -230,6 +230,9 @@ public class HttpProxyExecHandler extends SimpleChannelInboundHandler<Object> {
                     throws Exception {
                 byte[] bytes = httpResponseBodyPart.getBodyPartBytes();
                 LOGGER.debug("http client body part received, length:" + String.valueOf(bytes.length));
+                if (LOGGER.isTraceEnabled()) {
+                    LOGGER.trace(new String(bytes));
+                }
                 buf.writeBytes(bytes);
                 return STATE.CONTINUE;
             }
@@ -257,6 +260,17 @@ public class HttpProxyExecHandler extends SimpleChannelInboundHandler<Object> {
                 headers.stream().forEach(entry -> entry.getValue().stream().forEach(value ->
                         httpResponse.headers().add(entry.getKey(), value)));
 
+                LOGGER.debug("============== response headers ===================");
+                for (Map.Entry<String, List<String>> entry : headers) {
+                    String key = entry.getKey();
+                    for (String value : entry.getValue()) {
+                        httpResponse.headers().add(key, value);
+                        LOGGER.debug("[" + key + "] : [" + value + "]");
+                    }
+                }
+                LOGGER.debug("===================================================");
+
+
                 return STATE.CONTINUE;
             }
 
@@ -264,11 +278,10 @@ public class HttpProxyExecHandler extends SimpleChannelInboundHandler<Object> {
             public FullHttpResponse onCompleted() throws Exception {
                 LOGGER.debug("http client request completed");
                 tmpContent.delete();
-                return new DefaultFullHttpResponse(
-                        httpResponse.getProtocolVersion(),
-                        httpResponse.getStatus(),
-                        buf
-                );
+                FullHttpResponse fullHttpResponse =
+                        new DefaultFullHttpResponse( httpResponse.getProtocolVersion(), httpResponse .getStatus(), buf);
+                fullHttpResponse.headers().add(httpResponse.headers());
+                return fullHttpResponse;
             }
         });
 

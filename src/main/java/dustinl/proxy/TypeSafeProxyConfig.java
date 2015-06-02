@@ -14,4 +14,14 @@ public class TypeSafeProxyConfig implements ProxyConfig {
     public int getPort() {
         return config.getInt("port");
     }
+
+    @Override
+    public int getBossThreads() {
+        return config.getInt("bossThreads");
+    }
+
+    @Override
+    public int getWorkerThreads() {
+        return config.getInt("workerThreads");
+    }
 }
