@@ -131,13 +131,14 @@ public class HttpProxyExecHandler extends SimpleChannelInboundHandler<Object> {
 
         LOGGER.debug("============ request headers ===============");
         HttpHeaders headers = request.headers();
-        if (!headers.isEmpty()) {
-            for (Map.Entry<String, String> h : headers) {
-                String key = h.getKey();
-                String value = h.getValue();
-                requestBuilder.addHeader(key, value);
-                LOGGER.debug("[" + key + "] : [" + value + "]");
+        for (Map.Entry<String, String> h : headers) {
+            String key = h.getKey();
+            if (key.equalsIgnoreCase("Proxy-Connection]")) {
+                continue;
             }
+            String value = h.getValue();
+            requestBuilder.addHeader(key, value);
+            LOGGER.debug("[" + key + "] : [" + value + "]");
         }
         LOGGER.debug("============================================");
 
@@ -206,9 +207,6 @@ public class HttpProxyExecHandler extends SimpleChannelInboundHandler<Object> {
      * @throws IOException the iO exception
      */
     private void writeResponse(ChannelHandlerContext ctx) throws IOException {
-        boolean keepAlive = HttpHeaders.isKeepAlive(request);
-        // Build the response object.
-
         if (tmpContent.length() != 0) {
             requestBuilder.setBody(tmpContent);
         }
@@ -239,7 +237,6 @@ public class HttpProxyExecHandler extends SimpleChannelInboundHandler<Object> {
 
             @Override
             public STATE onStatusReceived(HttpResponseStatus httpResponseStatus) throws Exception {
-                LOGGER.debug("http client status received");
                 HttpVersion version = new HttpVersion(httpResponseStatus.getProtocolName(),
                         httpResponseStatus.getProtocolMajorVersion(), httpResponseStatus
                         .getProtocolMinorVersion(), false);
@@ -249,6 +246,7 @@ public class HttpProxyExecHandler extends SimpleChannelInboundHandler<Object> {
                         new io.netty.handler.codec.http.HttpResponseStatus(httpResponseStatus.getStatusCode(),
                                 httpResponseStatus.getStatusText());
                 httpResponse.setStatus(status);
+                LOGGER.debug("http client status received: " + status.toString());
                 return STATE.CONTINUE;
             }
 
