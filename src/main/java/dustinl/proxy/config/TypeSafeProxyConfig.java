@@ -1,4 +1,7 @@
-package dustinl.proxy;
+package dustinl.proxy.config;
+
+import java.util.ArrayList;
+import java.util.List;
 
 import com.typesafe.config.Config;
 import com.typesafe.config.ConfigFactory;
@@ -26,5 +29,15 @@ public class TypeSafeProxyConfig implements ProxyConfig {
     @Override
     public int getWorkerThreads() {
         return config.getInt("workerThreads");
+    }
+
+    @Override
+    public List<PluginConfig> getPluginConfigs() {
+        List<PluginConfig> configs = new ArrayList<>();
+        List<? extends Config> plugins = config.getConfigList("plugins");
+        for (Config plugin : plugins) {
+            configs.add(new PluginConfig(plugin.getString("name"), plugin.getString("className")));
+        }
+        return configs;
     }
 }

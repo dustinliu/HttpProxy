@@ -1,4 +1,4 @@
-package dustinl.proxy;
+package dustinl.proxy.handler;
 
 import java.util.concurrent.Future;
 

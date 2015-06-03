@@ -1,5 +1,7 @@
 package dustinl.proxy;
 
+import dustinl.proxy.config.ProxyConfig;
+import dustinl.proxy.config.ProxyConfigFactory;
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.channel.Channel;
 import io.netty.channel.EventLoopGroup;

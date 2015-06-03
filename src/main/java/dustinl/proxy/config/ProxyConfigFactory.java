@@ -1,10 +1,10 @@
-package dustinl.proxy;
+package dustinl.proxy.config;
 
 /**
  * The factory to get config singleton.
  */
 public final class ProxyConfigFactory {
-    private static final ProxyConfig CONFIG = new  TypeSafeProxyConfig();
+    private static final ProxyConfig CONFIG = new TypeSafeProxyConfig();
 
     /**
      * Gets config.

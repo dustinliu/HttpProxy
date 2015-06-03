@@ -1,4 +1,6 @@
-package dustinl.proxy;
+package dustinl.proxy.config;
+
+import java.util.List;
 
 /**
  * The interface Proxy config.
@@ -24,4 +26,6 @@ public interface ProxyConfig {
      * @return number of worker threads
      */
     int getWorkerThreads();
+
+    List<PluginConfig> getPluginConfigs();
 }
