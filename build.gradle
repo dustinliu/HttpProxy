@@ -73,7 +73,8 @@ task packaging(type: Tar, dependsOn: jar) {
     from(configurations.compile) { into "${root}/libs" }
     from(configurations.runtime) { into "${root}/libs" }
     from('conf/application.conf') { into "${root}/conf" }
-    from('src/bin/dustinl_proxy.sh') { into "${root}/bin" }
+    from('conf/log4j.properties') { into "${root}/conf" }
+    from('bin/proxy.sh') { into "${root}/bin" }
 }
 
 jar.dependsOn test
