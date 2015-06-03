@@ -28,7 +28,7 @@ public interface ProxyConfig {
     int getWorkerThreads();
 
     /**
-     * Gets list of plugin configs
+     * Gets list of plugin configs.
      *
      * @return list of the plugin config
      */

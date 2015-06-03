@@ -15,9 +15,6 @@ import io.netty.channel.socket.SocketChannel;
  */
 public class HttpProxyServerInitializer extends ChannelInitializer<SocketChannel> {
 
-    private static final String HTTP_CODEC_NAME = "httpCodec";
-    private static final String HTTP_EXEC_NAME = "httpExec";
-    private static final String HTTP_WRITER_NAME = "httpWriter";
     private static ProxyConfig config = ProxyConfigFactory.getConfig();
 
     @Override

@@ -136,7 +136,7 @@ public class HttpProxyExecHandler extends SimpleChannelInboundHandler<Object> {
         HttpHeaders headers = request.headers();
         for (Map.Entry<String, String> h : headers) {
             String key = h.getKey();
-            if (key.equalsIgnoreCase("Proxy-Connection]")) {
+            if ("Proxy-Connection".equalsIgnoreCase(key)) {
                 continue;
             }
             String value = h.getValue();
