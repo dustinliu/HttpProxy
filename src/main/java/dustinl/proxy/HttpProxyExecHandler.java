@@ -255,9 +255,6 @@ public class HttpProxyExecHandler extends SimpleChannelInboundHandler<Object> {
                     throws Exception {
                 LOGGER.debug("http client headers received");
                 Set<Map.Entry<String, List<String>>> headers = httpResponseHeaders.getHeaders().entrySet();
-                headers.stream().forEach(entry -> entry.getValue().stream().forEach(value ->
-                        httpResponse.headers().add(entry.getKey(), value)));
-
                 LOGGER.debug("============== response headers ===================");
                 for (Map.Entry<String, List<String>> entry : headers) {
                     String key = entry.getKey();
