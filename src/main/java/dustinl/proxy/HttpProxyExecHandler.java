@@ -57,6 +57,8 @@ public class HttpProxyExecHandler extends SimpleChannelInboundHandler<Object> {
     private static final int IDLE_CONNECTION_TIMEOUT = 10000;
     /** the maximum number of retry, if request failed . */
     private static final int MAX_RETRY = 5;
+    /** the maximum ms to wait for a request completed . */
+    private static final int REQUEST_TIMEOUT = 60000;
     /** the host header string. */
     private static final String HOST_HEADER = "HOST";
     /** the prefix of tmp file. */
@@ -70,6 +72,7 @@ public class HttpProxyExecHandler extends SimpleChannelInboundHandler<Object> {
                 .setAllowPoolingConnections(true)
                 .setPooledConnectionIdleTimeout(IDLE_CONNECTION_TIMEOUT)
                 .setMaxRequestRetry(MAX_RETRY)
+                .setRequestTimeout(REQUEST_TIMEOUT)
                 .build();
         httpClient = new AsyncHttpClient(config);
     }
