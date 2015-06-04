@@ -104,6 +104,7 @@ public class HttpProxyExecHandler extends SimpleChannelInboundHandler<Object> {
         try {
             writeContent(content);
         } catch (IOException e) {
+            LOGGER.debug("write content failed", e);
             sendError(ctx, io.netty.handler.codec.http.HttpResponseStatus.INTERNAL_SERVER_ERROR,
                     e.getMessage());
             return;
@@ -112,6 +113,7 @@ public class HttpProxyExecHandler extends SimpleChannelInboundHandler<Object> {
             try {
                 writeResponse(ctx);
             } catch (IOException e) {
+                LOGGER.debug("write response failed", e);
                 sendError(ctx, io.netty.handler.codec.http.HttpResponseStatus.BAD_REQUEST, e.getMessage());
             }
         }
@@ -148,6 +150,7 @@ public class HttpProxyExecHandler extends SimpleChannelInboundHandler<Object> {
         try {
             requestBuilder.setUrl(getUrl());
         } catch (MalformedURLException e) {
+            LOGGER.debug("malformed url " + e);
             sendError(ctx, io.netty.handler.codec.http.HttpResponseStatus.BAD_REQUEST,
                     e.getMessage());
         }
@@ -155,6 +158,7 @@ public class HttpProxyExecHandler extends SimpleChannelInboundHandler<Object> {
         try {
             tmpContent = File.createTempFile(TMP_PREFIX, null);
         } catch (IOException e) {
+            LOGGER.debug("create tmp file failed ", e);
             sendError(ctx, io.netty.handler.codec.http.HttpResponseStatus.INTERNAL_SERVER_ERROR,
                     e.getMessage());
         }
@@ -172,7 +176,7 @@ public class HttpProxyExecHandler extends SimpleChannelInboundHandler<Object> {
         }
 
         try (FileOutputStream outputStream = new FileOutputStream(tmpContent, true)) {
-            outputStream.write(content.array());
+            outputStream.write(Unpooled.copiedBuffer(content).array());
         }
     }
 
@@ -223,6 +227,7 @@ public class HttpProxyExecHandler extends SimpleChannelInboundHandler<Object> {
             @Override
             public void onThrowable(Throwable throwable) {
                 LOGGER.warn("http client got exception, " + throwable.getMessage());
+                LOGGER.debug("http client failed", throwable);
                 sendError(ctx, io.netty.handler.codec.http.HttpResponseStatus.BAD_REQUEST, throwable.getMessage());
             }
 
@@ -317,6 +322,7 @@ public class HttpProxyExecHandler extends SimpleChannelInboundHandler<Object> {
     @Override
     public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {
         LOGGER.warn("exception caught: " + cause.getMessage());
+        LOGGER.debug("netty exception caught", cause);
         sendError(ctx, io.netty.handler.codec.http.HttpResponseStatus.BAD_REQUEST, cause.getMessage());
         ctx.close();
     }
