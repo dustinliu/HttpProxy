@@ -60,6 +60,7 @@ task cucumber {
 task fetchRules {
     checkstyle_url.withInputStream{ i -> checkstyle_config.withOutputStream{ it << i }}
     pmd_url.withInputStream{ i -> pmd_config.withOutputStream{ it << i }}
+    pmd_url.withInputStream{ i -> pmd_config.withOutputStream{ it << i }}
 }
 
 check.dependsOn fetchRules
@@ -72,7 +73,7 @@ task packaging(type: Tar, dependsOn: jar) {
     from('build/libs/') { into "${root}/libs" }
     from(configurations.compile) { into "${root}/libs" }
     from(configurations.runtime) { into "${root}/libs" }
-    from('conf/application.conf') { into "${root}/conf" }
+    from('conf/application.conf.example') { into "${root}/conf" }
     from('conf/log4j.properties') { into "${root}/conf" }
     from('bin/proxy.sh') { into "${root}/bin" }
 }

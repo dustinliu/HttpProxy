@@ -20,6 +20,7 @@ import com.ning.http.client.AsyncHttpClientConfig;
 import com.ning.http.client.HttpResponseBodyPart;
 import com.ning.http.client.HttpResponseHeaders;
 import com.ning.http.client.HttpResponseStatus;
+import com.ning.http.client.ProxyServer;
 import com.ning.http.client.RequestBuilder;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
@@ -136,12 +137,24 @@ public class HttpProxyExecHandler extends SimpleChannelInboundHandler<Object> {
 
         LOGGER.debug("============ request headers ===============");
         HttpHeaders headers = request.headers();
-        for (Map.Entry<String, String> h : headers) {
-            String key = h.getKey();
+        for (Map.Entry<String, String> entry : headers) {
+            String key = entry.getKey();
             if ("Proxy-Connection".equalsIgnoreCase(key)) {
                 continue;
             }
-            String value = h.getValue();
+
+            if ("NEVEC_YCA_PROXY".equalsIgnoreCase(key)) {
+                try {
+                    requestBuilder.setProxyServer(getProxyServer(entry.getValue()));
+                    LOGGER.debug("[" + key + "] : [" + entry.getValue() + "]");
+                } catch (MalformedURLException e) {
+                    sendError(ctx, io.netty.handler.codec.http.HttpResponseStatus.BAD_REQUEST, "malformed proxy url");
+                } finally {
+                    continue;
+                }
+            }
+
+            String value = entry.getValue();
             requestBuilder.addHeader(key, value);
             LOGGER.debug("[" + key + "] : [" + value + "]");
         }
@@ -157,11 +170,17 @@ public class HttpProxyExecHandler extends SimpleChannelInboundHandler<Object> {
 
         try {
             tmpContent = File.createTempFile(TMP_PREFIX, null);
+            LOGGER.debug("create tmp file: " + tmpContent.getName());
         } catch (IOException e) {
             LOGGER.debug("create tmp file failed ", e);
             sendError(ctx, io.netty.handler.codec.http.HttpResponseStatus.INTERNAL_SERVER_ERROR,
                     e.getMessage());
         }
+    }
+
+    private ProxyServer getProxyServer(String proxyString) throws MalformedURLException {
+        URL proxyUrl = new URL(proxyString);
+        return new ProxyServer(proxyUrl.getHost(), proxyUrl.getPort());
     }
 
     /**
