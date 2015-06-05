@@ -195,7 +195,12 @@ public class HttpProxyExecHandler extends SimpleChannelInboundHandler<Object> {
         }
 
         try (FileOutputStream outputStream = new FileOutputStream(tmpContent, true)) {
-            outputStream.write(Unpooled.copiedBuffer(content).array());
+            ByteBuf buf = Unpooled.copiedBuffer(content);
+            try {
+                outputStream.write(buf.array());
+            } finally {
+                buf.release();
+            }
         }
     }
 
@@ -265,8 +270,8 @@ public class HttpProxyExecHandler extends SimpleChannelInboundHandler<Object> {
             @Override
             public STATE onStatusReceived(HttpResponseStatus httpResponseStatus) throws Exception {
                 HttpVersion version = new HttpVersion(httpResponseStatus.getProtocolName(),
-                        httpResponseStatus.getProtocolMajorVersion(), httpResponseStatus
-                        .getProtocolMinorVersion(), false);
+                        httpResponseStatus.getProtocolMajorVersion(), httpResponseStatus .getProtocolMinorVersion(),
+                        false);
                 httpResponse.setProtocolVersion(version);
 
                 io.netty.handler.codec.http.HttpResponseStatus status =

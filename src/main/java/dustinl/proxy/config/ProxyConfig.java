@@ -32,5 +32,5 @@ public interface ProxyConfig {
      *
      * @return list of the plugin config
      */
-    List<PluginConfig> getPluginConfigs();
+    List<HandlerConfig> getHandlerConfigs();
 }

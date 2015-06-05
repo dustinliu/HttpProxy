@@ -32,12 +32,24 @@ public class TypeSafeProxyConfig implements ProxyConfig {
     }
 
     @Override
-    public List<PluginConfig> getPluginConfigs() {
-        List<PluginConfig> configs = new ArrayList<>();
-        List<? extends Config> plugins = config.getConfigList("plugins");
-        for (Config plugin : plugins) {
-            configs.add(new PluginConfig(plugin.getString("name"), plugin.getString("className")));
+    public List<HandlerConfig> getHandlerConfigs() {
+        List<HandlerConfig> configs = new ArrayList<>();
+        List<? extends Config> handlers = config.getConfigList("handlers");
+        for (Config handler : handlers) {
+            configs.add(new HandlerConfig(handler.getString("name"), handler.getString("className"),
+                    getConfig(handler)));
         }
         return configs;
+    }
+
+    private static Config getConfig(Config config) {
+        Config ret;
+        try {
+            ret = config.getConfig("config");
+        } catch (Exception e) {
+            ret = null;
+        }
+
+        return ret;
     }
 }
