@@ -17,7 +17,7 @@ mkdir -p logs
 
 start() {
     echo "starting nevecbot..."
-    java -Xmx512M -Dlog4j.configuration=file:conf/log4j.properties -cp $CLASSPATH dustinl.proxy.HttpProxyServer&
+    java -Xmx512M -Dlog4j.configuration=file:conf/log4j.properties -Djava.net.preferIPv4Stack=true -cp $CLASSPATH dustinl.proxy.HttpProxyServer&
     if [ $? -eq 0 ]; then
         echo $! > logs/proxy.pid
         echo "proxy started"

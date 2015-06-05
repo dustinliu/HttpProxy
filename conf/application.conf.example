@@ -6,6 +6,13 @@
   handlers:
     [
       {
+        name: "AccessControlHandler",
+        className: "dustinl.proxy.handler.AccessControlHandler"
+        config: {
+          acls : ["10.82.16.209"]
+        }
+      },
+      {
         name: "HttpServerCodec",
         className: "io.netty.handler.codec.http.HttpServerCodec"
       },
@@ -15,7 +22,7 @@
       },
       {
         name: "testHandler",
-        className: "dustinl.proxy.handler.testHandler",
+        className: "dustinl.proxy.handler.TestHandler",
         config: {appId: "yahoo.nevec.hgp-product_egs.env-alph"}
       },
       {
