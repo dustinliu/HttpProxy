@@ -43,7 +43,7 @@ import org.slf4j.LoggerFactory;
 /**
  * The http proxy server handler to handle http request.
  */
-public class HttpProxyExecHandler extends SimpleChannelInboundHandler<Object> {
+public class HttpExecutionHandler extends SimpleChannelInboundHandler<Object> {
 
     /** The http request. */
     private HttpRequest request;
@@ -65,7 +65,7 @@ public class HttpProxyExecHandler extends SimpleChannelInboundHandler<Object> {
     /** the prefix of tmp file. */
     private static final String TMP_PREFIX = "http_proxy";
     /** logger. */
-    private static final Logger LOGGER = LoggerFactory.getLogger(HttpProxyExecHandler.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(HttpExecutionHandler.class);
 
     static  {
         AsyncHttpClientConfig config = new AsyncHttpClientConfig.Builder()

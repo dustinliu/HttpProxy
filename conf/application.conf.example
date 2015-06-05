@@ -9,12 +9,16 @@
         name: "AccessControlHandler",
         className: "dustinl.proxy.handler.AccessControlHandler"
         config: {
-          acls : ["10.82.16.209"]
+          acls : ["127.0.0.1"]
         }
       },
       {
         name: "HttpServerCodec",
         className: "io.netty.handler.codec.http.HttpServerCodec"
+      },
+      {
+        name: "AccessLogHandler",
+        className: "dustinl.proxy.handler.AccessLogHandler"
       },
       {
         name: "HttpContentCompressor",
@@ -23,15 +27,15 @@
       {
         name: "testHandler",
         className: "dustinl.proxy.handler.TestHandler",
-        config: {appId: "yahoo.nevec.hgp-product_egs.env-alph"}
+        config: {appId: "alpha"}
       },
       {
-        name: "HttpProxyExecHandler",
-        className: "dustinl.proxy.handler.HttpProxyExecHandler"
+        name: "HttpExecutionHandler",
+        className: "dustinl.proxy.handler.HttpExecutionHandler"
       },
       {
-        name: "HttpProxyWriterHandler",
-        className: "dustinl.proxy.handler.HttpProxyWriterHandler"
+        name: "HttpResponseWriterHandler",
+        className: "dustinl.proxy.handler.HttpResponseWriterHandler"
       }
     ]
 }
