@@ -215,7 +215,7 @@ public class HttpExecutionHandler extends SimpleChannelInboundHandler<Object> {
     }
 
     private void checkState(State state) {
-        if (currentState.equals(state)) {
+        if (!currentState.equals(state)) {
             currentState = State.WAITING_REQUEST;
             throw new IllegalArgumentException("illegal state");
         }
