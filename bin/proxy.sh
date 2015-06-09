@@ -4,6 +4,8 @@ mydir=`pwd`
 root=${mydir%/bin}
 export ROOT=${ROOT:-$root}
 
+PID_FILE="logs/proxy.pid"
+
 CLASSPATH=""
 
 for jar in $(ls libs/*.jar); do
@@ -16,10 +18,16 @@ mkdir -p logs
 
 
 start() {
+    ps ax|grep `cat $PID_FILE`|grep -v grep > /dev/null
+    if [ $? -eq 0 ]; then
+        echo "already running"
+        exit 1
+    fi
+
     echo "starting nevecbot..."
     java -Xmx512M -Dlog4j.configuration=file:conf/log4j.properties -Djava.net.preferIPv4Stack=true -cp $CLASSPATH dustinl.proxy.HttpProxyServer&
     if [ $? -eq 0 ]; then
-        echo $! > logs/proxy.pid
+        echo $! > ${PID_FILE}
         echo "proxy started"
         return 0
     else
@@ -55,7 +63,7 @@ case $1 in
         fi
         ;;
     *)
-        echo "unknown command"
+        echo "proxy.sh start|stop|restart"
         exit 1
         ;;
 esac

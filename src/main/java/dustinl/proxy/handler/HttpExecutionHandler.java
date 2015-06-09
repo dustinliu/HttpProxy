@@ -45,12 +45,24 @@ import org.slf4j.LoggerFactory;
  */
 public class HttpExecutionHandler extends SimpleChannelInboundHandler<Object> {
 
+    /** proxy connection header. */
+    private static final String PROXY_CONNECTION = "Proxy-Connection";
+    private static final String NEVEC_YCA_PROXY = "Nevec-YCA-Proxy";
     /** The http request. */
     private HttpRequest request;
     /** The http client request builder. */
     private RequestBuilder requestBuilder;
     /** tmp file to store the large content. */
     private File tmpContent;
+
+    private enum State {
+        WAITING_REQUEST,
+        PROCESSING_REQUEST,
+        REQUEST_DONE,
+        PROCESSING_CONTENT,
+    }
+
+    private State currentState = State.WAITING_REQUEST;
 
     /** The httpClient. */
     private static AsyncHttpClient httpClient;
@@ -86,37 +98,16 @@ public class HttpExecutionHandler extends SimpleChannelInboundHandler<Object> {
     @Override
     protected void channelRead0(ChannelHandlerContext ctx, Object msg) {
         if (msg instanceof HttpRequest) {
+            checkState(State.WAITING_REQUEST);
+            currentState = State.PROCESSING_REQUEST;
             this.request = (HttpRequest) msg;
             handlerHttpRequest(ctx);
+            currentState = State.REQUEST_DONE;
         } else if (msg instanceof HttpContent) {
+            checkState(State.REQUEST_DONE);
+            currentState = State.PROCESSING_CONTENT;
             HttpContent httpContent = (HttpContent) msg;
             handleHttpContent(ctx, httpContent);
-        }
-    }
-
-    /**
-     * Handle {@link HttpContent} message.
-     *
-     * @param ctx the {@link ChannelHandlerContext}
-     * @param httpContent the message to handle
-     */
-    private void handleHttpContent(ChannelHandlerContext ctx, HttpContent httpContent) {
-        ByteBuf content = httpContent.content();
-        try {
-            writeContent(content);
-        } catch (IOException e) {
-            LOGGER.debug("write content failed", e);
-            sendError(ctx, io.netty.handler.codec.http.HttpResponseStatus.INTERNAL_SERVER_ERROR,
-                    e.getMessage());
-            return;
-        }
-        if (httpContent instanceof LastHttpContent) {
-            try {
-                writeResponse(ctx);
-            } catch (IOException e) {
-                LOGGER.debug("write response failed", e);
-                sendError(ctx, io.netty.handler.codec.http.HttpResponseStatus.BAD_REQUEST, e.getMessage());
-            }
         }
     }
 
@@ -139,24 +130,20 @@ public class HttpExecutionHandler extends SimpleChannelInboundHandler<Object> {
         HttpHeaders headers = request.headers();
         for (Map.Entry<String, String> entry : headers) {
             String key = entry.getKey();
-            if ("Proxy-Connection".equalsIgnoreCase(key)) {
+            if (PROXY_CONNECTION.equalsIgnoreCase(key)) {
                 continue;
-            }
-
-            if ("NEVEC_YCA_PROXY".equalsIgnoreCase(key)) {
+            } else if (NEVEC_YCA_PROXY.equalsIgnoreCase(key)) {
                 try {
                     requestBuilder.setProxyServer(getProxyServer(entry.getValue()));
                     LOGGER.debug("[" + key + "] : [" + entry.getValue() + "]");
                 } catch (MalformedURLException e) {
                     sendError(ctx, io.netty.handler.codec.http.HttpResponseStatus.BAD_REQUEST, "malformed proxy url");
-                } finally {
-                    continue;
                 }
+            } else {
+                String value = entry.getValue();
+                requestBuilder.addHeader(key, value);
+                LOGGER.debug("[" + key + "] : [" + value + "]");
             }
-
-            String value = entry.getValue();
-            requestBuilder.addHeader(key, value);
-            LOGGER.debug("[" + key + "] : [" + value + "]");
         }
         LOGGER.debug("============================================");
 
@@ -178,9 +165,32 @@ public class HttpExecutionHandler extends SimpleChannelInboundHandler<Object> {
         }
     }
 
-    private ProxyServer getProxyServer(String proxyString) throws MalformedURLException {
-        URL proxyUrl = new URL(proxyString);
-        return new ProxyServer(proxyUrl.getHost(), proxyUrl.getPort());
+    /**
+     * Handle {@link HttpContent} message.
+     *
+     * @param ctx the {@link ChannelHandlerContext}
+     * @param httpContent the message to handle
+     */
+    private void handleHttpContent(ChannelHandlerContext ctx, HttpContent httpContent) {
+        ByteBuf content = httpContent.content();
+        try {
+            writeContent(content);
+        } catch (IOException e) {
+            LOGGER.debug("write content failed", e);
+            sendError(ctx, io.netty.handler.codec.http.HttpResponseStatus.INTERNAL_SERVER_ERROR,
+                    e.getMessage());
+            return;
+        }
+
+        if (httpContent instanceof LastHttpContent) {
+            try {
+                writeResponse(ctx);
+                currentState = State.WAITING_REQUEST;
+            } catch (IOException e) {
+                LOGGER.debug("write response failed", e);
+                sendError(ctx, io.netty.handler.codec.http.HttpResponseStatus.BAD_REQUEST, e.getMessage());
+            }
+        }
     }
 
     /**
@@ -202,6 +212,18 @@ public class HttpExecutionHandler extends SimpleChannelInboundHandler<Object> {
                 buf.release();
             }
         }
+    }
+
+    private void checkState(State state) {
+        if (currentState.equals(state)) {
+            currentState = State.WAITING_REQUEST;
+            throw new IllegalArgumentException("illegal state");
+        }
+    }
+
+    private ProxyServer getProxyServer(String proxyString) throws MalformedURLException {
+        URL proxyUrl = new URL(proxyString);
+        return new ProxyServer(proxyUrl.getHost(), proxyUrl.getPort());
     }
 
     /**
@@ -347,7 +369,7 @@ public class HttpExecutionHandler extends SimpleChannelInboundHandler<Object> {
     public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {
         LOGGER.warn("exception caught: " + cause.getMessage());
         LOGGER.debug("netty exception caught", cause);
-        sendError(ctx, io.netty.handler.codec.http.HttpResponseStatus.BAD_REQUEST, cause.getMessage());
-        ctx.close();
+        currentState = State.WAITING_REQUEST;
+        sendError(ctx, io.netty.handler.codec.http.HttpResponseStatus.INTERNAL_SERVER_ERROR, cause.getMessage());
     }
 }
