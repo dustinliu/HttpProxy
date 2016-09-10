@@ -26,3 +26,5 @@ checkstyle.xml
 pmd.xml
 
 logs/
+
+tags
